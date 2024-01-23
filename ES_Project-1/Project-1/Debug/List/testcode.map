@@ -1,0 +1,45 @@
+RAM Allocation [bytes]
+Variable                                                                          Address   Size
+------------------------------------------------------------------------------------------------
+students                                                                          0x02C3      50
+_base_y (alcd.lib)                                                                0x02F5       4
+_seed (stdlib.lib)                                                                0x02F9       4
+
+EEPROM Allocation [bytes]
+Variable                                                                          Address   Size
+------------------------------------------------------------------------------------------------
+
+Register Allocation
+Variable                                                                          Register  Size
+------------------------------------------------------------------------------------------------
+i                                                                                 R5           1
+_lcd_x                                                                            R4           1
+_lcd_y                                                                            R7           1
+_lcd_maxx                                                                         R6           1
+
+FLASH Allocation [words]
+Function                                                                          Address   Size
+------------------------------------------------------------------------------------------------
+initialize                                                                        0x0015A      6
+enterStudentData                                                                  0x00160     70
+changePasscode                                                                    0x001A6    142
+adminOperations                                                                   0x00234    106
+main                                                                              0x0029E    244
+Admin                                                                             0x00392      5
+Set_PC                                                                            0x00397     18
+EE_Write                                                                          0x003A9     14
+EE_Read                                                                           0x003B7     12
+Keypad                                                                            0x003C3     94
+_print_G100                                                                       0x00421    296
+put_lcd_G100                                                                      0x00549     14
+lcd_printf                                                                        0x00557     39
+_lcd_write_nibble_G101                                                            0x0057E     21
+_lcd_write_data                                                                   0x00593     13
+lcd_gotoxy                                                                        0x005A0     18
+lcd_clear                                                                         0x005B2     10
+lcd_putchar                                                                       0x005BC     19
+lcd_puts                                                                          0x005CF     15
+lcd_init                                                                          0x005DE     43
+strlen                                                                            0x00609     12
+strlenf                                                                           0x00615     13
+strncpy                                                                           0x00622     21

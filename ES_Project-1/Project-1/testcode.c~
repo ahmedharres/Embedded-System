@@ -1,0 +1,573 @@
+/*
+* testcode.c
+*
+* Created: 20/12/2023 07:10:37
+* Author: ahmedharres
+*/
+
+#include <stdio.h>
+#include <mega16.h>
+#include <delay.h>
+#include <alcd.h>
+#include <eeprom.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define ID_DIGITS 3
+#define PASSCODE_DIGITS 3
+#define MAX_STUDENTS 5
+
+
+#define bit_set(r,b) r|=(1<<b)
+#define bit_clr(r,b) r&= ~(1<<b)
+
+
+#define ADMIN_ID 111 // ID of the admin student
+#define ADMIN_PASSCODE 123
+
+
+typedef struct
+{
+	char name[6];  // Increase the size to accommodate the null terminator
+	unsigned int id;
+	unsigned int passcode;
+} Student;
+
+
+
+Student students[MAX_STUDENTS];
+unsigned char i;
+
+
+char Keypad();
+void EE_Write(unsigned int address, unsigned char data);
+unsigned char EE_Read(unsigned int address);
+
+void initialize()
+{
+	lcd_init(16);
+	lcd_puts("Press * to Enter\n");
+
+}
+
+void enterStudentData(Student students[], unsigned char studentIndex, const char *name, unsigned int id, unsigned int passcode)
+{
+	unsigned char j = 0;
+	strncpy(students[studentIndex].name, name, sizeof(students[studentIndex].name) - 1);
+	students[studentIndex].name[sizeof(students[studentIndex].name) - 1] = '\0';  // Ensure null-termination
+	students[studentIndex].id = id;
+	students[studentIndex].passcode = passcode;
+
+	// Store data into EEPROM for the current student
+	EE_Write(studentIndex * sizeof(Student), students[studentIndex].id);
+	EE_Write(studentIndex * sizeof(Student) + 1, students[studentIndex].passcode);
+	for (j = 0; j < sizeof(students[studentIndex].name); ++j)
+		EE_Write(studentIndex * sizeof(Student) + 2 + j, students[studentIndex].name[j]);
+}
+
+//
+
+// Function to change passcode
+void changePasscode(Student students[], unsigned char studentIndex)
+{
+	unsigned char i = 0;
+	unsigned char j = 0;
+	unsigned char k = 0;
+	unsigned char l = 0;
+	unsigned int enteredID;
+	unsigned int enteredOldPasscode;
+	unsigned int newPasscode1;
+	unsigned int newPasscode2;
+	char key;
+
+	lcd_clear();
+	lcd_puts("Enter your ID: \n");
+
+	// Read entered ID from keypad
+	enteredID = 0;
+	for ( i = 0; i < ID_DIGITS; ++i)
+		{
+		unsigned char digit = Keypad();
+		lcd_putchar(digit);
+		delay_ms(200);
+		enteredID = enteredID * 10 + (digit - '0');
+		}
+
+	// Check if the entered ID is stored
+	if (enteredID == students[studentIndex].id)
+		{
+		lcd_clear();
+		lcd_puts("Enter your old passcode:");
+
+		// Read entered old passcode from keypad
+		enteredOldPasscode = 0;
+		for ( j = 0; j < PASSCODE_DIGITS; ++j)
+			{
+			key = Keypad();
+			enteredOldPasscode = enteredOldPasscode * 10 + (key - '0');
+			lcd_putchar('*');
+			delay_ms(200);
+			}
+
+		// Check if the entered old passcode is correct
+		if (enteredOldPasscode == students[studentIndex].passcode)
+			{
+			lcd_clear();
+			lcd_puts("Enter new passcode:");
+
+			// Read new passcode
+			newPasscode1 = 0;
+			for (k = 0; k < PASSCODE_DIGITS; ++k)
+				{
+				key = Keypad();
+				newPasscode1 = newPasscode1 * 10 + (key - '0');
+				lcd_putchar('*');
+				delay_ms(200);
+				}
+
+			lcd_clear();
+			lcd_puts("Re-enter new passcode:");
+
+			// Re-enter new passcode
+			newPasscode2 = 0;
+			for (l = 0; l < PASSCODE_DIGITS; ++l)
+				{
+				key = Keypad();
+				newPasscode2 = newPasscode2 * 10 + (key - '0');
+				lcd_putchar('*');
+				delay_ms(200);
+				}
+
+			// Check if the two entries are identical
+			if (newPasscode1 == newPasscode2)
+				{
+				// Update the passcode in memory and EEPROM
+				students[studentIndex].passcode = newPasscode1;
+				EE_Write(studentIndex * sizeof(Student) + 1, students[studentIndex].passcode);
+
+				lcd_clear();
+				lcd_puts("New PC stored");
+				delay_ms(2000);
+				}
+			else
+				{
+				// Two entries are not identical
+				lcd_clear();
+				lcd_puts("Passcodes do not match");
+				delay_ms(2000);
+				// Generate two peep alarms
+				PORTB.2 = 1;
+				delay_ms(500);
+				PORTB.2 = 0;
+				delay_ms(500);
+				PORTB.2 = 1;
+				delay_ms(500);
+				PORTB.2 = 0;
+				delay_ms(500);
+				}
+			}
+		else
+			{
+			// Wrong old passcode
+			lcd_clear();
+			lcd_puts("Wrong old passcode");
+			delay_ms(2000);
+			// Generate two peep alarms
+			PORTB.2 = 1;
+			delay_ms(500);
+			PORTB.2 = 0;
+			delay_ms(500);
+			PORTB.2 = 1;
+			delay_ms(500);
+			PORTB.2 = 0;
+			delay_ms(500);
+			}
+		}
+	else
+		{
+		// Wrong ID
+		lcd_clear();
+		lcd_puts("Wrong ID");
+		// Generate two peep alarms
+		PORTB.2 = 1;
+		delay_ms(500);
+		PORTB.2 = 0;
+		delay_ms(500);
+		PORTB.2 = 1;
+		delay_ms(500);
+		PORTB.2 = 0;
+		delay_ms(500);
+		} 
+       initialize(); 
+}
+
+void adminOperations(Student students[])
+{
+	unsigned int enteredAdminPC;
+	unsigned char i, j;
+	unsigned int reprogramStudentID;
+	unsigned int newStudentPC;
+	char key;
+
+	lcd_clear();
+	lcd_puts("Enter Admin PC:\n");
+
+	// Read entered admin passcode from keypad
+	enteredAdminPC = 0;
+	for (j = 0; j < PASSCODE_DIGITS; ++j)
+		{
+		key = Keypad();
+		enteredAdminPC = enteredAdminPC * 10 + (key - '0');
+		lcd_putchar('*');
+		delay_ms(200);
+		}
+
+	// Check if the entered admin passcode is correct
+	if (enteredAdminPC == ADMIN_PASSCODE)
+		{
+		lcd_clear();
+		lcd_puts("Enter student ID:");
+
+		// Read student ID for reprogramming
+		reprogramStudentID = 0;
+		for (j = 0; j < ID_DIGITS; ++j)
+			{
+			unsigned char digit = Keypad();
+			lcd_putchar(digit);
+			delay_ms(200);
+			reprogramStudentID = reprogramStudentID * 10 + (digit - '0');
+			}
+
+		// Find the student with the entered ID
+		for (i = 0; i < MAX_STUDENTS; ++i)
+			{
+			if (students[i].id == reprogramStudentID)
+				{
+				lcd_clear();
+				lcd_puts("Enter new PC:\n");
+
+				// Read new passcode for the student
+				newStudentPC = 0;
+				for (j = 0; j < PASSCODE_DIGITS; ++j)
+					{
+					key = Keypad();
+					newStudentPC = newStudentPC * 10 + (key - '0');
+					lcd_putchar('*');
+					delay_ms(200);
+					}
+
+				// Update the passcode in memory
+				students[i].passcode = newStudentPC;
+
+				// Update the passcode in EEPROM
+				EE_Write(i * sizeof(Student) + 1, students[i].passcode);
+
+				lcd_clear();
+				lcd_puts("PC is stored\n");
+				delay_ms(2000);
+
+				// Break out of the loop after reprogramming the student
+				break;
+				}
+			}
+
+		// If the loop completes without finding the student
+		if (i == MAX_STUDENTS)
+			{
+			lcd_clear();
+			lcd_puts("Contact Admin");
+			// Generate two peep alarms
+			PORTB.2 = 1;
+			delay_ms(500);
+			PORTB.2 = 0;
+			delay_ms(500);
+			PORTB.2 = 1;
+			delay_ms(500);
+			PORTB.2 = 0;
+			delay_ms(500);
+
+			// Wait for a while
+			delay_ms(2000);
+			}
+		}
+	else
+		{
+		lcd_clear();
+		lcd_puts("Contact Admin");
+		// Generate two peep alarms
+		PORTB.2 = 1;
+		delay_ms(500);
+		PORTB.2 = 0;
+		delay_ms(500);
+		PORTB.2 = 1;
+		delay_ms(500);
+		PORTB.2 = 0;
+		delay_ms(500);
+
+		// Wait for a while
+		delay_ms(2000);
+		}
+        initialize();
+}
+
+
+
+void main()
+{
+	unsigned int enteredID;
+	unsigned int enteredPasscode;
+	char key;
+
+	initialize();
+
+	DDRC = 0b00000111;
+	PORTC = 0b11111000;
+	DDRB.0 = 1; // PIN B.0 IS OUTPUT
+	DDRB.1 = 1; // PIN B.1 IS OUTPUT
+	DDRB.2 = 1; // PIN B.2 IS OUTPUT
+	lcd_init(16);
+
+	// INT0
+	DDRD.2 = 0; // INPUT
+	PORTD.2 = 1; // PULL UP
+	bit_set(MCUCR, 1); // Falling Edga
+	bit_clr(MCUCR, 0);
+	SREG.7 = 1; // Enable Gloabal INT
+	bit_set(GICR, 6); // EXT0 Specific Enable
+
+	// INT1
+	DDRD.3 = 0; // INPUT
+	PORTD.3 = 1; // PULL UP
+	bit_set(MCUCR, 1); // Falling Edga
+	bit_clr(MCUCR, 0);
+	SREG.7 = 1; // Enable Gloabal INT
+	bit_set(GICR, 7); // EXT0 Specific Enable
+
+	// Enter data for multiple students
+	enterStudentData(students, 0, "Prof", 111, 123);
+	enterStudentData(students, 1, "Ahmed", 126, 129);
+	enterStudentData(students, 2, "Amer", 128, 125);
+	enterStudentData(students, 3, "Adel", 130, 226);
+	enterStudentData(students, 4, "Omar", 132, 179);
+
+	while (1)
+		{
+		unsigned char j = 0;
+		unsigned int storedPasscode;
+
+		initialize();
+
+		key = Keypad();
+		if (key == '*')
+			{
+			lcd_clear();
+			lcd_puts("Enter your ID: \n");
+
+			// Read entered ID from keypad
+			enteredID = 0;
+			for (i = 0; i < ID_DIGITS; ++i)
+				{
+				unsigned char digit = Keypad();
+				lcd_putchar(digit);
+				delay_ms(200);
+				enteredID = enteredID * 10 + (digit - '0');
+				}
+
+			// Check if the entered ID is stored
+			for (i = 0; i < MAX_STUDENTS; ++i)
+				{
+				unsigned int storedID = EE_Read(i * sizeof(Student));
+
+				if (enteredID == storedID)
+					{
+					lcd_clear();
+					lcd_puts("Enter your passcode:");
+
+					// Read entered passcode from keypad
+					enteredPasscode = 0;
+					for (j = 0; j < PASSCODE_DIGITS; ++j)
+						{
+						key = Keypad();
+						enteredPasscode = enteredPasscode * 10 + (key - '0');
+						lcd_putchar('*');
+						delay_ms(200);
+						}
+
+					// Check if the entered passcode is correct
+					storedPasscode = EE_Read(i * sizeof(Student) + 1);
+					if (enteredPasscode == storedPasscode)
+						{
+						lcd_clear();
+						lcd_printf("Welcome, %s", students[i].name);
+						delay_ms(2000);
+						PORTB.0 = 1;
+						PORTB.1 = 1;
+						delay_ms(2000);
+						PORTB.0 = 0;
+						PORTB.1 = 0;
+						// Additional actions when access is granted
+						}
+					else
+						{
+						lcd_clear();
+						lcd_puts("Sorry, wrong passcode");
+						delay_ms(2000);
+						// Generate one peep alarm
+						PORTB.2 = 1;
+						delay_ms(500);
+						PORTB.2 = 0;
+						delay_ms(500);
+
+						// Wait for a while
+						delay_ms(2000);
+						}
+
+					// Break out of the loop after finding the student
+					break;
+					}
+				}
+
+			// If the loop completes without finding the student
+			if (i == MAX_STUDENTS)
+				{
+				lcd_clear();
+				lcd_puts("Wrong ID");
+				// Generate two peep alarms
+				PORTB.2 = 1;
+				delay_ms(500);
+				PORTB.2 = 0;
+				delay_ms(500);
+				PORTB.2 = 1;
+				delay_ms(500);
+				PORTB.2 = 0;
+				delay_ms(500);
+
+				// Wait for a while
+				delay_ms(1000);
+				}
+
+			// Clear entered data for the next attempt
+			initialize();
+			}
+
+		}
+
+}
+
+interrupt [2]void Admin (void)
+{
+	adminOperations(students);
+
+}
+
+interrupt [3]void Set_PC (void)
+{
+	changePasscode(students, i);
+
+}
+
+
+// Implement EEPROM_Write() function
+void EE_Write(unsigned int address, unsigned char data)
+{
+	while (EECR.1 == 1)
+		; // wait until EEWE = 0
+	EEAR = address;
+	EEDR = data;
+	EECR.2 = 1; // EEMRE
+	EECR.1 = 1; // EEWE
+}
+
+// Implement EEPROM_Read() function
+unsigned char EE_Read(unsigned int address)
+{
+	while (EECR.1 == 1)
+		; // wait until EEWE = 0
+	EEAR = address;
+	EECR.0 = 1; // EERE
+	return EEDR;
+}
+// Implement Keypad() function
+char Keypad()
+{
+	while (1)
+		{
+		PORTC.0 = 0; // col 1 is active
+		PORTC.1 = 1; // col 2 is inactive
+		PORTC.2 = 1; // col 3 is inactive
+		switch (PINC)
+			{
+			case 0b11110110:
+				while (PINC.3 == 0);
+				return '1';
+				break;
+
+			case 0b11101110:
+				while (PINC.4 == 0);
+				return '4';
+				break;
+
+			case 0b11011110:
+				while (PINC.5 == 0);
+				return '7';
+				break;
+
+			case 0b10111110:
+				while (PINC.6 == 0);
+				return '*';
+				break;
+			}
+
+		PORTC.0 = 1; // col 1 is inactive
+		PORTC.1 = 0; // col 2 is active
+		PORTC.2 = 1; // col 3 is inactive
+		switch (PINC)
+			{
+			case 0b11110101:
+				while (PINC.3 == 0);
+				return '2';
+				break;
+
+			case 0b11101101:
+				while (PINC.4 == 0);
+				return '5';
+				break;
+
+			case 0b11011101:
+				while (PINC.5 == 0);
+				return '8';
+				break;
+
+			case 0b10111101:
+				while (PINC.6 == 0);
+				return '0';
+				break;
+			}
+
+		PORTC.0 = 1; // col 1 is inactive
+		PORTC.1 = 1; // col 2 is inactive
+		PORTC.2 = 0; // col 3 is active
+		switch (PINC)
+			{
+			case 0b11110011:
+				while (PINC.3 == 0);
+				return '3';
+				break;
+
+			case 0b11101011:
+				while (PINC.4 == 0);
+				return '6';
+				break;
+
+			case 0b11011011:
+				while (PINC.5 == 0);
+				return '9';
+				break;
+
+			case 0b110111011:
+				while (PINC.6 == 0);
+				return '#';
+				break;
+			}
+		}
+}
